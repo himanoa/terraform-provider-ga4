@@ -168,13 +168,22 @@ func (r *customDimensionResource) Update(ctx context.Context, req resource.Updat
 		return
 	}
 
-	// description を空に戻すときも送りたいので ForceSendFields で空文字を落とさせない
-	updated, err := r.svc.Properties.CustomDimensions.Patch(state.ID.ValueString(), &analyticsadmin.GoogleAnalyticsAdminV1betaCustomDimension{
-		DisplayName:                plan.DisplayName.ValueString(),
-		Description:                plan.Description.ValueString(),
-		DisallowAdsPersonalization: plan.DisallowAdsPersonalization.ValueBool(),
-		ForceSendFields:            []string{"Description", "DisallowAdsPersonalization"},
-	}).UpdateMask("displayName,description,disallowAdsPersonalization").Context(ctx).Do()
+	// description を空に戻すときも送りたいので ForceSendFields で空文字を落とさせない。
+	// disallowAdsPersonalization は USER スコープ専用で、EVENT / ITEM のとき update_mask に含めると API が 400 を返す
+	body := &analyticsadmin.GoogleAnalyticsAdminV1betaCustomDimension{
+		DisplayName:     plan.DisplayName.ValueString(),
+		Description:     plan.Description.ValueString(),
+		ForceSendFields: []string{"Description"},
+	}
+	mask := "displayName,description"
+
+	if state.Scope.ValueString() == "USER" {
+		body.DisallowAdsPersonalization = plan.DisallowAdsPersonalization.ValueBool()
+		body.ForceSendFields = append(body.ForceSendFields, "DisallowAdsPersonalization")
+		mask += ",disallowAdsPersonalization"
+	}
+
+	updated, err := r.svc.Properties.CustomDimensions.Patch(state.ID.ValueString(), body).UpdateMask(mask).Context(ctx).Do()
 	if err != nil {
 		resp.Diagnostics.AddError("GA4 カスタムディメンションを更新できません", err.Error())
 		return
