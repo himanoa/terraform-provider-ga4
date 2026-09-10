@@ -9,6 +9,9 @@ GA4 プロパティ。destroy はゴミ箱への移動で、35 日間は管理�
 - `time_zone`（必須）: 例 `Asia/Tokyo`
 - `currency_code`（省略可）: 例 `JPY`。省略すると GA4 側の既定値
 - `industry_category`（省略可）: 例 `GAMES`
+- `acknowledge_user_data_collection`（省略可、既定 `true`）: 「ユーザーデータ収集の確認」を行う。
+  `ga4_measurement_protocol_secret` はこれが済んでいないと作れない（API が `failedPrecondition` を返す）。
+  確認済みかを返す API が無いので `false` に戻しても GA4 側は変わらない
 
 ## 属性
 

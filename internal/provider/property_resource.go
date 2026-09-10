@@ -7,6 +7,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -36,7 +37,14 @@ type propertyResourceModel struct {
 	IndustryCategory types.String `tfsdk:"industry_category"`
 	PropertyType     types.String `tfsdk:"property_type"`
 	ServiceLevel     types.String `tfsdk:"service_level"`
+	// GA4 側から読み戻せない（確認済みかを返す API が無い）ので、Read では直前の state の値を引き継ぐ
+	AcknowledgeUserDataCollection types.Bool `tfsdk:"acknowledge_user_data_collection"`
 }
+
+// userDataCollectionAcknowledgement は API が要求する定型文。1 文字でも違うと 400 になる
+const userDataCollectionAcknowledgement = "I acknowledge that I have the necessary privacy disclosures and rights from my end users " +
+	"for the collection and processing of their data, including the association of such data with the visitation " +
+	"information Google Analytics collects from my site and/or app property."
 
 func newPropertyResource() resource.Resource {
 	return &propertyResource{}
@@ -91,6 +99,14 @@ func (r *propertyResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 				Description:   "`GOOGLE_ANALYTICS_STANDARD` か `GOOGLE_ANALYTICS_360`。",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
+			"acknowledge_user_data_collection": schema.BoolAttribute{
+				Optional: true,
+				Computed: true,
+				Default:  booldefault.StaticBool(true),
+				Description: "「ユーザーデータ収集の確認」をこのプロパティに対して行う（管理画面で新規プロパティに出る確認と同じもの）。" +
+					"Measurement Protocol API シークレットは、これが済んでいないと作れない。" +
+					"確認済みかどうかを返す API が無いので、true → false に戻しても GA4 側は変わらない。",
+			},
 		},
 	}
 }
@@ -121,7 +137,30 @@ func (r *propertyResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
-	resp.Diagnostics.Append(resp.State.Set(ctx, propertyModelFromAPI(created))...)
+	model := propertyModelFromAPI(created)
+	model.AcknowledgeUserDataCollection = plan.AcknowledgeUserDataCollection
+
+	// 作成に成功した時点で state に入れておく。以降で失敗しても、作ったプロパティが野良にならないようにする
+	resp.Diagnostics.Append(resp.State.Set(ctx, model)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if plan.AcknowledgeUserDataCollection.ValueBool() {
+		if err := r.acknowledgeUserDataCollection(ctx, created.Name); err != nil {
+			resp.Diagnostics.AddError("GA4 プロパティのユーザーデータ収集の確認ができません", err.Error())
+			return
+		}
+	}
+}
+
+// acknowledgeUserDataCollection は「ユーザーデータ収集の確認」を行う。何度呼んでも同じ結果になる
+func (r *propertyResource) acknowledgeUserDataCollection(ctx context.Context, name string) error {
+	_, err := r.svc.Properties.AcknowledgeUserDataCollection(name, &analyticsadmin.GoogleAnalyticsAdminV1betaAcknowledgeUserDataCollectionRequest{
+		Acknowledgement: userDataCollectionAcknowledgement,
+	}).Context(ctx).Do()
+
+	return err
 }
 
 func (r *propertyResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -148,7 +187,11 @@ func (r *propertyResource) Read(ctx context.Context, req resource.ReadRequest, r
 		return
 	}
 
-	resp.Diagnostics.Append(resp.State.Set(ctx, propertyModelFromAPI(got))...)
+	model := propertyModelFromAPI(got)
+	// API から読み戻せないので state の値を引き継ぐ（import 直後は null で、次の plan で既定値へ寄る）
+	model.AcknowledgeUserDataCollection = state.AcknowledgeUserDataCollection
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, model)...)
 }
 
 func (r *propertyResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -183,7 +226,18 @@ func (r *propertyResource) Update(ctx context.Context, req resource.UpdateReques
 		return
 	}
 
-	resp.Diagnostics.Append(resp.State.Set(ctx, propertyModelFromAPI(updated))...)
+	// false（または import 直後の null）から true に変わったときだけ確認を行う。true → false は GA4 側で戻せないので何もしない
+	if plan.AcknowledgeUserDataCollection.ValueBool() && !state.AcknowledgeUserDataCollection.ValueBool() {
+		if err := r.acknowledgeUserDataCollection(ctx, state.ID.ValueString()); err != nil {
+			resp.Diagnostics.AddError("GA4 プロパティのユーザーデータ収集の確認ができません", err.Error())
+			return
+		}
+	}
+
+	model := propertyModelFromAPI(updated)
+	model.AcknowledgeUserDataCollection = plan.AcknowledgeUserDataCollection
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, model)...)
 }
 
 func (r *propertyResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -215,6 +269,8 @@ func propertyModelFromAPI(p *analyticsadmin.GoogleAnalyticsAdminV1betaProperty) 
 		IndustryCategory: types.StringValue(p.IndustryCategory),
 		PropertyType:     types.StringValue(p.PropertyType),
 		ServiceLevel:     types.StringValue(p.ServiceLevel),
+		// 呼び出し側で plan / state の値に差し替える
+		AcknowledgeUserDataCollection: types.BoolNull(),
 	}
 }
 
