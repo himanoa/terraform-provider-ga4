@@ -1,0 +1,9 @@
+terraform-provider-ga4
+dist/
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+*.tfvars
+*.json
+!terraform-registry-manifest.json
