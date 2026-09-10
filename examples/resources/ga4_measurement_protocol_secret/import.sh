@@ -1,0 +1,1 @@
+terraform import ga4_measurement_protocol_secret.server properties/123/dataStreams/456/measurementProtocolSecrets/789

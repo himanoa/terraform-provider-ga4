@@ -1,0 +1,1 @@
+terraform import ga4_custom_dimension.stage_id properties/123/customDimensions/456
