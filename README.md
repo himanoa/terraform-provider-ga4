@@ -81,7 +81,7 @@ Google Cloud 側では Google Analytics Admin API を有効にしておく。
 ## 注意
 
 - `ga4_property` の destroy はゴミ箱への移動。35 日間は管理画面から復元できる
-- `ga4_custom_dimension` の destroy はアーカイブ。取り消せず、同じ `parameter_name` で作り直すこともできない
+- `ga4_custom_dimension` の destroy はアーカイブ。取り消せない（同じ `parameter_name` で新しく作ることはできる）
 - `ga4_measurement_protocol_secret` の `secret_value` は state に平文で入る
 - iOS / Android のアプリストリームは Firebase が必要で API だけでは作れないため扱わない
 - レポート用識別子・データ保持期間・Google シグナルは Admin API v1beta に無いので管理画面で設定する

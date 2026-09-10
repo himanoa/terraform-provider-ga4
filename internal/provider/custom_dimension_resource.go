@@ -24,8 +24,8 @@ var (
 
 // customDimensionResource は GA4 のカスタムディメンション。
 //
-// GA4 にはカスタムディメンションの削除が無く、アーカイブしかない。アーカイブは取り消せず、
-// 同じパラメータ名で作り直すこともできない。そのため destroy はアーカイブとして実装している。
+// GA4 にはカスタムディメンションの削除が無く、アーカイブしかない。アーカイブは取り消せない
+// （同じパラメータ名で新しく作ることはできる）。そのため destroy はアーカイブとして実装している。
 // `parameter_name` や `scope` を変えると「アーカイブして別名で作る」動きになる点に注意。
 type customDimensionResource struct {
 	svc *analyticsadmin.Service
@@ -52,7 +52,7 @@ func (r *customDimensionResource) Metadata(_ context.Context, req resource.Metad
 func (r *customDimensionResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Description: "GA4 のカスタムディメンション。GA4 に削除は無いので、destroy はアーカイブになる。" +
-			"アーカイブは取り消せず、同じ `parameter_name` で作り直すこともできない。" +
+			"アーカイブは取り消せない（同じ `parameter_name` で新しく作ることはできる）。" +
 			"`parameter_name` / `scope` の変更は「アーカイブして別名で作り直す」動きになる。",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
