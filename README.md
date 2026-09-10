@@ -113,3 +113,7 @@ provider_installation {
 
 `v*` タグを push すると GitHub Actions が goreleaser でビルドし、GitHub Releases に置く。
 署名用に `GPG_PRIVATE_KEY` と `PASSPHRASE` のシークレットが要る。
+
+## License
+
+[MIT](LICENSE)
